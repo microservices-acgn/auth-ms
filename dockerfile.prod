@@ -1,0 +1,59 @@
+#Dependencias
+FROM node:21-alpine3.19 as deps
+
+RUN npm install -g pnpm
+
+WORKDIR /usr/src/app
+
+COPY package*.json ./
+COPY pnpm-lock.yaml ./
+
+RUN pnpm install
+
+
+
+
+
+#Builder
+FROM node:21-alpine3.19 as build
+
+
+RUN npm install -g pnpm
+
+WORKDIR /usr/src/app
+#Copiar de deps los modeulos de node
+#COMANDO COPIAR DESDE DONDE (DEPS DEFINIDO ARRIBA) QUIERO LOS MODULOS DE NODE DODNE ESTAN? Y DESPUES DONDE LOS VOY A PEGAR ./NODE....
+COPY --from=deps /usr/src/app/node_modules ./node_modules
+
+#Copiar codigo fuente (todo lo que no esta en docker ignore)
+COPY  . .
+
+RUN npx prisma generate
+#Podria agregar un Run npm run test y si los test fallan no se consruye la app
+RUN pnpm run build 
+
+RUN pnpm install --prod && pnpm cache clean
+
+
+
+
+#Crear imagen final
+FROM node:21-alpine3.19 as prod
+
+
+WORKDIR /usr/src/app
+
+COPY --from=build /usr/src/app/node_modules ./node_modules
+
+#Copiar codigo fuente carpeta dist
+
+COPY --from=build /usr/src/app/dist ./dist
+
+ENV NODE_ENV=production
+
+USER node
+
+EXPOSE 3000
+
+
+CMD ["node", "dist/main.js"]
